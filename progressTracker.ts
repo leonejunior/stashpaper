@@ -1,4 +1,4 @@
-import { App, MarkdownView, TFile } from "obsidian";
+import { App, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 
 /**
  * Maps a progress percentage (0–100) to the Stashpaper status string.
@@ -18,8 +18,8 @@ export function progressToStatus(progress: number): string {
  */
 function shouldUpdateStatus(current: string, candidate: string): boolean {
   const rank: Record<string, number> = { unread: 0, reading: 1, done: 2 };
-  const currentRank = rank[current] ?? 0;
-  const candidateRank = rank[candidate] ?? 0;
+  const currentRank = rank[current.toLowerCase()] ?? 0;
+  const candidateRank = rank[candidate.toLowerCase()] ?? 0;
   return candidateRank > currentRank;
 }
 
@@ -47,7 +47,8 @@ export async function patchProgressFrontmatter(
 /**
  * Returns true if a TFile is a Stashpaper article (has `source_url` in frontmatter).
  */
-export function isStashpaperFile(app: App, file: TFile): boolean {
+export function isStashpaperFile(app: App, file: TFile | null | undefined): boolean {
+  if (!file || file.extension !== "md") return false;
   const cache = app.metadataCache.getFileCache(file);
   const fm = cache?.frontmatter;
   if (!fm) return false;
@@ -64,7 +65,7 @@ export function getSavedProgress(app: App, file: TFile): number {
   if (!fm) return 0;
   const raw = fm["progress"];
   if (typeof raw === "number") {
-    if (raw > 0 && raw <= 1) return Math.round(raw * 100); // handle 0.0–1.0 fraction
+    if (raw > 0 && raw <= 1) return Math.round(raw * 100);
     return Math.max(0, Math.min(100, Math.round(raw)));
   }
   if (typeof raw === "string") {
@@ -78,10 +79,11 @@ export function getSavedProgress(app: App, file: TFile): number {
  * Manages reading-progress tracking for Stashpaper articles.
  *
  * Responsibilities:
- *  - Listening for active-leaf changes to attach/detach scroll listeners
+ *  - Listening for active-leaf & layout changes to attach/detach scroll listeners
+ *  - Seamlessly tracking scroll in Reading View AND Live Preview
  *  - Debounce-saving scroll position to frontmatter via processFrontMatter
  *  - Restoring scroll position when a Stashpaper note is opened
- *  - Keeping a status-bar element current
+ *  - Keeping the status-bar element current ("Stashpaper: N% read")
  */
 export class ReadingProgressTracker {
   private app: App;
@@ -91,13 +93,13 @@ export class ReadingProgressTracker {
   private trackedView: MarkdownView | null = null;
   private trackedFile: TFile | null = null;
 
-  // Scroll listener and debounce timer
-  private scrollEl: HTMLElement | null = null;
-  private scrollHandler: ((e: Event) => void) | null = null;
+  // Attached DOM elements and scroll handler
+  private attachedElements: HTMLElement[] = [];
+  private scrollHandler: (() => void) | null = null;
   private debounceTimer: number | null = null;
   private readonly DEBOUNCE_MS = 2000;
 
-  // Avoid save storms by remembering last saved value
+  // Avoid unnecessary disk writes by remembering last saved progress
   private lastSavedProgress: number = -1;
 
   constructor(app: App, statusBarEl: HTMLElement) {
@@ -107,101 +109,139 @@ export class ReadingProgressTracker {
   }
 
   /**
-   * Called by the plugin whenever the active leaf changes.
-   * Tears down the old listener and sets up a new one if applicable.
+   * Finds the currently active Stashpaper view and file, even if focus is temporarily
+   * in the sidebar (such as the Explorer view).
    */
-  async onActiveLeafChange(leaf: unknown): Promise<void> {
-    // Always detach from the previously tracked view first
+  private getActiveStashpaperContext(): { view: MarkdownView; file: TFile } | null {
+    // 1. Direct active view of type MarkdownView
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeView?.file && isStashpaperFile(this.app, activeView.file)) {
+      return { view: activeView, file: activeView.file };
+    }
+
+    // 2. Active file in workspace
+    const activeFile = this.app.workspace.getActiveFile();
+    if (activeFile && isStashpaperFile(this.app, activeFile)) {
+      const leaves = this.app.workspace.getLeavesOfType("markdown");
+      for (const l of leaves) {
+        if (l.view instanceof MarkdownView && l.view.file?.path === activeFile.path) {
+          return { view: l.view, file: activeFile };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Evaluates the active note and attaches tracking if it is a Stashpaper article.
+   */
+  async checkActiveNote(): Promise<void> {
+    const ctx = this.getActiveStashpaperContext();
+
+    if (!ctx) {
+      this.detachScrollListener();
+      this.hideStatusBar();
+      return;
+    }
+
+    const { view, file } = ctx;
+
+    // If already tracking this exact view and file, just update the status bar
+    if (this.trackedView === view && this.trackedFile?.path === file.path) {
+      const current = this.lastSavedProgress >= 0 ? this.lastSavedProgress : getSavedProgress(this.app, file);
+      this.updateStatusBar(current);
+      return;
+    }
+
+    // Flush any pending save for previous note before switching
     this.detachScrollListener();
-
-    if (!leaf) {
-      this.hideStatusBar();
-      return;
-    }
-
-    // We only care about MarkdownView in preview (reading) mode
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view) {
-      this.hideStatusBar();
-      return;
-    }
-
-    const file = view.file;
-    if (!file || !isStashpaperFile(this.app, file)) {
-      this.hideStatusBar();
-      return;
-    }
 
     this.trackedView = view;
     this.trackedFile = file;
     this.lastSavedProgress = getSavedProgress(this.app, file);
 
-    // Update status bar immediately with saved value
+    // Update status bar immediately
     this.updateStatusBar(this.lastSavedProgress);
 
-    // Attach scroll listener on the preview container
-    // We need to wait briefly for the view to fully mount its DOM
+    // Attach listeners and restore scroll after DOM layout completes
     window.setTimeout(() => {
-      this.attachScrollListener(view, file);
-      this.restoreScrollPosition(view, file);
-    }, 350);
+      if (this.trackedView === view) {
+        this.attachScrollListener(view, file);
+        this.restoreScrollPosition(view, file);
+      }
+    }, 250);
+
+    // Backup restore check in case complex markdown/images took extra milliseconds to layout
+    window.setTimeout(() => {
+      if (this.trackedView === view) {
+        this.restoreScrollPosition(view, file);
+      }
+    }, 650);
   }
 
   /**
-   * Called when a leaf switches between source/preview mode (layout-change).
-   * Re-evaluates the listener setup for the current active view.
+   * Called on active-leaf-change.
+   */
+  async onActiveLeafChange(leaf?: WorkspaceLeaf | null): Promise<void> {
+    await this.checkActiveNote();
+  }
+
+  /**
+   * Called on layout-change (e.g. view mode toggles source ↔ reading).
    */
   async onLayoutChange(): Promise<void> {
-    await this.onActiveLeafChange(null);
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (view) {
-      await this.onActiveLeafChange(view.leaf);
-    }
+    await this.checkActiveNote();
   }
 
   /**
-   * Attaches a scroll event listener to the preview pane's scrollable element.
+   * Attaches scroll listeners to the preview container, CodeMirror scroller,
+   * and view content element (using capture) so no scroll event is missed.
    */
   private attachScrollListener(view: MarkdownView, file: TFile): void {
-    // The reading-mode scroll container is inside previewMode.containerEl
-    const previewContainer = view.previewMode?.containerEl;
-    if (!previewContainer) return;
+    this.detachScrollListener();
 
-    // Find the actual scrollable element (may be the container or a child)
-    const scrollable = this.findScrollableEl(previewContainer);
-    if (!scrollable) return;
+    this.trackedView = view;
+    this.trackedFile = file;
 
-    this.scrollEl = scrollable;
     this.scrollHandler = () => this.onScroll(view, file);
-    scrollable.addEventListener("scroll", this.scrollHandler, { passive: true });
+
+    const addTarget = (el: HTMLElement | null | undefined, capture = false) => {
+      if (!el || this.attachedElements.includes(el)) return;
+      el.addEventListener("scroll", this.scrollHandler!, { passive: true, capture });
+      this.attachedElements.push(el);
+    };
+
+    // 1. Capture on view container catches ANY descendant scroll (Reading View or Live Preview)
+    addTarget(view.contentEl, true);
+
+    // 2. Reading mode container & preview view
+    addTarget(view.previewMode?.containerEl);
+    const previewInner = view.previewMode?.containerEl?.querySelector<HTMLElement>(".markdown-preview-view");
+    if (previewInner) addTarget(previewInner);
+
+    // 3. Live Preview / source editor scroller
+    const cmScroller = view.contentEl.querySelector<HTMLElement>(".cm-scroller");
+    if (cmScroller) addTarget(cmScroller);
   }
 
   /**
-   * Finds the scrollable child element inside a container.
-   * Obsidian preview mode wraps content in `.markdown-preview-view` which scrolls.
-   */
-  private findScrollableEl(container: HTMLElement): HTMLElement | null {
-    // First try the well-known class name used by Obsidian reading mode
-    const inner = container.querySelector<HTMLElement>(".markdown-preview-view");
-    if (inner) return inner;
-    // Fallback: the container itself (if it has overflow-y: auto/scroll)
-    return container;
-  }
-
-  /**
-   * Detaches the current scroll listener and clears any pending debounce save.
+   * Detaches all scroll listeners and immediately flushes any pending save.
    */
   private detachScrollListener(): void {
-    if (this.scrollEl && this.scrollHandler) {
-      this.scrollEl.removeEventListener("scroll", this.scrollHandler);
+    if (this.scrollHandler) {
+      for (const el of this.attachedElements) {
+        el.removeEventListener("scroll", this.scrollHandler, true);
+        el.removeEventListener("scroll", this.scrollHandler, false);
+      }
     }
-    this.scrollEl = null;
+    this.attachedElements = [];
     this.scrollHandler = null;
 
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
-      // Flush pending save immediately on leave so progress is never lost
+      // Immediately flush pending save on detach so progress is never lost
       if (this.trackedView && this.trackedFile) {
         this.saveScrollProgress(this.trackedView, this.trackedFile);
       }
@@ -212,9 +252,13 @@ export class ReadingProgressTracker {
   }
 
   /**
-   * Handles a scroll event — debounces the actual save by DEBOUNCE_MS.
+   * Handles a scroll event — debounces the save by DEBOUNCE_MS (2s).
    */
   private onScroll(view: MarkdownView, file: TFile): void {
+    // Update live status bar immediately as user scrolls
+    const liveProgress = this.calculateProgress(view);
+    this.updateStatusBar(liveProgress);
+
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
     }
@@ -225,26 +269,41 @@ export class ReadingProgressTracker {
   }
 
   /**
-   * Calculates current scroll percentage from previewMode.getScroll(),
-   * then patches frontmatter if it changed meaningfully (±1%).
-   *
-   * previewMode.getScroll() returns a fraction of total scrollable height.
-   * We convert to an integer 0–100 percent.
+   * Accurately calculates scroll percentage (0–100) from the visible scroll container.
+   */
+  private calculateProgress(view: MarkdownView): number {
+    const mode = view.getMode();
+    let scrollable: HTMLElement | null = null;
+
+    if (mode === "preview") {
+      const container = view.previewMode?.containerEl;
+      if (container) {
+        scrollable = container.classList.contains("markdown-preview-view")
+          ? container
+          : container.querySelector<HTMLElement>(".markdown-preview-view") || container;
+      }
+    } else {
+      scrollable = view.contentEl.querySelector<HTMLElement>(".cm-scroller") || view.contentEl;
+    }
+
+    if (!scrollable) return 0;
+
+    const maxScroll = scrollable.scrollHeight - scrollable.clientHeight;
+    if (maxScroll <= 0) return 0;
+
+    const pct = (scrollable.scrollTop / maxScroll) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  }
+
+  /**
+   * Saves current scroll progress to note frontmatter via processFrontMatter.
    */
   private async saveScrollProgress(view: MarkdownView, file: TFile): Promise<void> {
     try {
-      let scrollFraction = view.previewMode?.getScroll() ?? 0;
-      // Fallback calculation using container scroll position if getScroll() is unavailable
-      if (!scrollFraction && this.scrollEl) {
-        const maxScroll = this.scrollEl.scrollHeight - this.scrollEl.clientHeight;
-        if (maxScroll > 0) {
-          scrollFraction = this.scrollEl.scrollTop / maxScroll;
-        }
-      }
-      const progress = Math.max(0, Math.min(100, Math.round(scrollFraction * 100)));
+      const progress = this.calculateProgress(view);
 
-      // Only write if changed by at least 1%
-      if (Math.abs(progress - this.lastSavedProgress) < 1) return;
+      // Only save if progress changed by at least 1%
+      if (Math.abs(progress - this.lastSavedProgress) < 1 && this.lastSavedProgress >= 0) return;
       this.lastSavedProgress = progress;
 
       this.updateStatusBar(progress);
@@ -255,30 +314,39 @@ export class ReadingProgressTracker {
   }
 
   /**
-   * Scrolls the preview pane to the percentage stored in frontmatter
-   * after the note finishes rendering.
+   * Restores the scroll position to the percentage stored in frontmatter.
    */
   private restoreScrollPosition(view: MarkdownView, file: TFile): void {
     const savedProgress = getSavedProgress(this.app, file);
     if (savedProgress <= 0) return;
 
-    // Convert percent back to the fraction expected by applyScroll
-    const fraction = savedProgress / 100;
+    const mode = view.getMode();
+    let scrollable: HTMLElement | null = null;
 
-    try {
-      view.previewMode?.applyScroll(fraction);
-    } catch (err) {
-      console.debug("Stashpaper: failed to restore scroll position", err);
+    if (mode === "preview") {
+      const container = view.previewMode?.containerEl;
+      if (container) {
+        scrollable = container.classList.contains("markdown-preview-view")
+          ? container
+          : container.querySelector<HTMLElement>(".markdown-preview-view") || container;
+      }
+    } else {
+      scrollable = view.contentEl.querySelector<HTMLElement>(".cm-scroller") || view.contentEl;
     }
 
-    // Direct container scrollTop fallback if applyScroll didn't move it
-    if (this.scrollEl) {
-      const maxScroll = this.scrollEl.scrollHeight - this.scrollEl.clientHeight;
+    if (scrollable) {
+      const maxScroll = scrollable.scrollHeight - scrollable.clientHeight;
       if (maxScroll > 0) {
-        const targetPx = maxScroll * fraction;
-        if (Math.abs(this.scrollEl.scrollTop - targetPx) > 50) {
-          this.scrollEl.scrollTop = targetPx;
-        }
+        const target = (maxScroll * savedProgress) / 100;
+        scrollable.scrollTop = target;
+      }
+    }
+
+    if (mode === "preview" && view.previewMode) {
+      try {
+        view.previewMode.applyScroll(savedProgress / 100);
+      } catch {
+        // Handled by direct scrollTop above
       }
     }
   }
@@ -300,7 +368,7 @@ export class ReadingProgressTracker {
   }
 
   /**
-   * Clean up everything — called when the plugin is unloaded.
+   * Clean up everything — called when the plugin unloads.
    */
   destroy(): void {
     this.detachScrollListener();

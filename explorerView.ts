@@ -1079,10 +1079,10 @@ export class StashpaperExplorerView extends ItemView {
       }
     }
 
-    // Click to open file in active leaf or new tab
+    // Click to open file in Reading View in active leaf or new tab
     const openArticle = async () => {
       const leaf = this.app.workspace.getLeaf(false);
-      await leaf.openFile(article.file);
+      await leaf.openFile(article.file, { state: { mode: "preview" } });
     };
 
     card.addEventListener("click", openArticle);

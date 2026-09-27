@@ -102,17 +102,29 @@ export default class StashpaperPlugin extends Plugin {
 
     this.progressTracker = new ReadingProgressTracker(this.app, this.statusBarEl);
 
+    // Initial check when Obsidian layout is ready
+    this.app.workspace.onLayoutReady(() => {
+      this.progressTracker?.checkActiveNote();
+    });
+
     // Fire on every leaf activation (tab/pane switch)
     this.registerEvent(
-      this.app.workspace.on("active-leaf-change", (leaf) => {
-        this.progressTracker?.onActiveLeafChange(leaf);
+      this.app.workspace.on("active-leaf-change", () => {
+        this.progressTracker?.checkActiveNote();
       })
     );
 
     // Fire when view mode toggles (source ↔ reading)
     this.registerEvent(
       this.app.workspace.on("layout-change", () => {
-        this.progressTracker?.onLayoutChange();
+        this.progressTracker?.checkActiveNote();
+      })
+    );
+
+    // Also check when metadata cache resolves for files
+    this.registerEvent(
+      this.app.metadataCache.on("resolve", () => {
+        this.progressTracker?.checkActiveNote();
       })
     );
   }
@@ -165,9 +177,9 @@ export default class StashpaperPlugin extends Plugin {
           { keepImages: this.settings.keepImages, notebook }
         );
 
-        // 3. Open the newly created note in the active pane
+        // 3. Open the newly created note in Reading View
         const leaf = this.app.workspace.getLeaf(false);
-        await leaf.openFile(file);
+        await leaf.openFile(file, { state: { mode: "preview" } });
 
         progressNotice.hide();
         new Notice(`Article saved: ${article.title}`);
