@@ -1,0 +1,337 @@
+/* ==========================================================================
+   Stashpaper Plugin Styles
+   ========================================================================== */
+
+/* ── Container wrappers for relative dropdown placement ── */
+.stashpaper-control-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.stashpaper-folder-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* ── Root folder badge in setting label (matching screenshot 3) ── */
+.stashpaper-root-badge {
+  display: inline-block;
+  background-color: #272231;
+  color: #a68af9;
+  border: 1px solid rgba(166, 138, 249, 0.25);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  font-weight: 500;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.theme-light .stashpaper-root-badge {
+  background-color: #f1edff;
+  color: #6347c7;
+  border-color: rgba(99, 71, 199, 0.25);
+}
+
+/* ── Folder input styling ── */
+.stashpaper-folder-input {
+  width: 100%;
+}
+
+/* ── Tags Box (contains pills + text input) ── */
+.stashpaper-tags-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  width: 100%;
+  padding: 4px 8px;
+  background-color: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--input-radius, 4px);
+  cursor: text;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stashpaper-tags-box:focus-within {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+/* ── Tag Pill (matching user screenshot: dark purple bg, lilac text, round pill) ── */
+.stashpaper-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #272231;
+  color: #a68af9;
+  border: 1px solid rgba(166, 138, 249, 0.25);
+  border-radius: 9999px;
+  padding: 3px 9px;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 500;
+  cursor: default;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.stashpaper-tag-pill:hover {
+  background-color: #2e263d;
+  border-color: rgba(166, 138, 249, 0.45);
+}
+
+.theme-light .stashpaper-tag-pill {
+  background-color: #f1edff;
+  color: #6347c7;
+  border-color: rgba(99, 71, 199, 0.25);
+}
+
+.theme-light .stashpaper-tag-pill:hover {
+  background-color: #e8e1fc;
+  border-color: rgba(99, 71, 199, 0.45);
+}
+
+/* ── Tag pill remove button (✕) ── */
+.stashpaper-tag-remove {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.75;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.stashpaper-tag-remove:hover {
+  opacity: 1;
+  background-color: rgba(166, 138, 249, 0.25);
+}
+
+.theme-light .stashpaper-tag-remove:hover {
+  background-color: rgba(99, 71, 199, 0.2);
+}
+
+/* ── Inline Tag Text Input ── */
+.stashpaper-tag-input {
+  flex: 1 1 120px;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 2px 4px !important;
+  color: var(--text-normal) !important;
+  font-size: var(--font-ui-small, 13px) !important;
+  min-width: 80px;
+}
+
+.stashpaper-tag-input:focus {
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* ── Suggester Dropdown Menu (In-flow so it NEVER overlaps buttons) ── */
+.stashpaper-suggester {
+  position: relative;
+  margin-top: 6px;
+  width: 100%;
+  max-height: 135px;
+  overflow-y: auto;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  padding: 4px 0;
+  z-index: 5;
+}
+
+.stashpaper-suggester-item {
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text-normal);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.stashpaper-suggester-item:hover,
+.stashpaper-suggester-item.is-selected {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-accent);
+}
+
+.stashpaper-suggester-item.is-create {
+  color: var(--text-accent);
+  border-top: 1px solid var(--background-modifier-border);
+  font-weight: 500;
+}
+
+.stashpaper-suggester-item .suggester-icon {
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.stashpaper-suggester-empty {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Inline Error Message ── */
+.stashpaper-error-msg {
+  color: var(--text-error, #f87171);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* ── Button Container ── */
+.stashpaper-button-container {
+  border-top: 1px solid var(--background-modifier-border) !important;
+  padding-top: 12px !important;
+  margin-top: 14px !important;
+  width: 100% !important;
+}
+
+.stashpaper-button-container .setting-item-control {
+  width: 100% !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+}
+
+/* ==========================================================================
+   Obsidian Mobile & Small Screens Optimization
+   ========================================================================== */
+
+/* Top-align modal container on mobile so keyboard never submerges dialog */
+.is-mobile .modal-container,
+.is-phone .modal-container {
+  align-items: flex-start !important;
+  justify-content: center !important;
+  padding-top: max(8px, env(safe-area-inset-top, 8px)) !important;
+}
+
+/* Modal desktop default */
+.stashpaper-modal {
+  max-width: 580px;
+  width: 100%;
+}
+
+/* Mobile responsive rules */
+.is-mobile .stashpaper-modal,
+.is-phone .stashpaper-modal,
+@media (max-width: 650px) {
+  .stashpaper-modal {
+    position: relative !important;
+    top: 0 !important;
+    margin: 0 auto !important;
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 86vh !important;
+    padding: 14px 12px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Stack setting labels & controls vertically on small screens */
+  .stashpaper-modal .setting-item {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    padding: 12px 0 !important;
+    border-top: 1px solid var(--background-modifier-border) !important;
+  }
+
+  .stashpaper-modal .setting-item-info {
+    width: 100% !important;
+    margin-bottom: 2px !important;
+  }
+
+  .stashpaper-modal .setting-item-control {
+    width: 100% !important;
+    justify-content: stretch !important;
+  }
+
+  /* 16px font-size prevents iOS Safari from automatically zooming the viewport */
+  .stashpaper-modal input[type="text"],
+  .stashpaper-modal .stashpaper-folder-input,
+  .stashpaper-modal .stashpaper-tag-input {
+    font-size: 16px !important;
+    min-height: 40px !important;
+    padding: 8px 10px !important;
+  }
+
+  /* Mobile tags container */
+  .stashpaper-modal .stashpaper-tags-box {
+    min-height: 44px !important;
+    padding: 6px 8px !important;
+    gap: 8px !important;
+  }
+
+  /* Touch-friendly tag pill sizes */
+  .stashpaper-modal .stashpaper-tag-pill {
+    padding: 5px 12px !important;
+    font-size: 14px !important;
+  }
+
+  /* Larger touch target for ✕ on mobile fingers */
+  .stashpaper-modal .stashpaper-tag-remove {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 14px !important;
+  }
+
+  /* Touch-friendly suggester items */
+  .stashpaper-modal .stashpaper-suggester {
+    max-height: 155px !important;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  .stashpaper-modal .stashpaper-suggester-item {
+    padding: 10px 14px !important;
+    min-height: 42px !important;
+    font-size: 14px !important;
+  }
+
+  /* Mobile Action Buttons: sticky bottom bar, full width, easy thumb tapping */
+  .stashpaper-modal .stashpaper-button-container {
+    position: sticky !important;
+    bottom: -14px !important;
+    background: var(--background-primary) !important;
+    padding: 10px 0 6px 0 !important;
+    margin-top: 12px !important;
+    border-top: 1px solid var(--background-modifier-border) !important;
+    z-index: 30 !important;
+  }
+
+  .stashpaper-modal .stashpaper-button-container .setting-item-control {
+    display: flex !important;
+    width: 100% !important;
+    gap: 12px !important;
+    margin: 0 !important;
+  }
+
+  .stashpaper-modal .stashpaper-button-container .setting-item-control button {
+    flex: 1 1 50% !important;
+    min-height: 44px !important;
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    border-radius: var(--radius-m, 6px) !important;
+  }
+}
+

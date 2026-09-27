@@ -1,0 +1,10 @@
+{
+  "id": "stashpaper",
+  "name": "Stashpaper",
+  "version": "1.0.0",
+  "main": "main.js",
+  "minAppVersion": "1.0.0",
+  "minPluginVersion": "1.0.0",
+  "description": "Save, organize, and read web articles inside your vault.",
+  "isDesktopOnly": false
+}
