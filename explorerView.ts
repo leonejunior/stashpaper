@@ -108,9 +108,19 @@ export class StashpaperExplorerView extends ItemView {
         (filePath: string, progress: number, status: string) => {
           const art = this.allArticles.find((a) => a.file.path === filePath);
           if (art) {
+            const oldStatus = art.status;
             art.progress = progress;
             art.status = status;
-            this.renderArticles();
+            // Only do a full re-render when the status filter is active and the
+            // status transition would change which articles are visible. Otherwise
+            // patch just the affected card so collapsed notebook groups are kept.
+            const visibilityChanged =
+              this.selectedStatus !== "all" && oldStatus !== status;
+            if (visibilityChanged) {
+              this.renderArticles();
+            } else {
+              this.patchCardInPlace(filePath, progress, status);
+            }
           }
         }
       )
@@ -331,7 +341,6 @@ export class StashpaperExplorerView extends ItemView {
     this.toggleComponent.setValue(this.groupByNotebook);
     this.toggleComponent.onChange((val) => {
       this.groupByNotebook = val;
-      // Per prompt: renders the same flat list for now, placeholder for future prompt
       this.renderArticles();
     });
 
@@ -1013,6 +1022,7 @@ export class StashpaperExplorerView extends ItemView {
         role: "button",
         tabindex: "0",
         "aria-label": `Open article ${article.title}`,
+        "data-file-path": article.file.path,
       },
     });
 
@@ -1106,5 +1116,56 @@ export class StashpaperExplorerView extends ItemView {
       }
     });
   }
-}
 
+  /**
+   * Surgically updates only the progress bar, percentage label, and status badge
+   * of a single article card already rendered in the DOM. Avoids a full list
+   * re-render so collapsed notebook groups stay collapsed during live tracking.
+   */
+  private patchCardInPlace(
+    filePath: string,
+    progress: number,
+    status: string
+  ): void {
+    const escapedPath = filePath.replace(/"/g, '\\"');
+    const card = this.listEl.querySelector<HTMLElement>(
+      `[data-file-path="${escapedPath}"]`
+    );
+    if (!card) return;
+
+    // ── Status badge ──
+    const badge = card.querySelector<HTMLElement>(".stashpaper-status-badge");
+    if (badge) {
+      const baseClasses = Array.from(badge.classList).filter(
+        (c) => !c.startsWith("status-")
+      );
+      badge.className = [...baseClasses, `status-${status}`].join(" ");
+      badge.setText(status);
+    }
+
+    // ── Progress bar fill ──
+    const progressBar = card.querySelector<HTMLElement>(
+      ".stashpaper-article-progress-bar"
+    );
+    if (progressBar) {
+      progressBar.style.width = `${progress}%`;
+    }
+
+    // ── Progress percentage label (add / update / remove) ──
+    const metaRow = card.querySelector<HTMLElement>(".stashpaper-article-meta");
+    if (metaRow) {
+      let label = metaRow.querySelector<HTMLElement>(".stashpaper-meta-progress");
+      if (progress > 0) {
+        if (!label) {
+          label = createEl("span", {
+            cls: "stashpaper-meta-item stashpaper-meta-progress",
+          });
+          metaRow.prepend(label);
+        }
+        label.setText(`${progress}%`);
+      } else if (label) {
+        label.remove();
+      }
+    }
+  }
+}
