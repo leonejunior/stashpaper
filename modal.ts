@@ -6,6 +6,7 @@ export interface SaveArticleData {
   url: string;
   folder: string;
   tags: string[];
+  notebook?: string;
 }
 
 const URL_PATTERN = /^https?:\/\/.+/i;
@@ -15,11 +16,13 @@ const URL_PATTERN = /^https?:\/\/.+/i;
  * 1. Article URL (pre-filled from clipboard if valid)
  * 2. Destination folder with interactive search & creation
  * 3. Tags with tag pills (✕ to remove) and auto-suggest from vault + saved tags
+ * 4. Optional notebook with autocomplete from MetadataCache
  */
 export class SaveArticleModal extends Modal {
   private url = "";
   private subFolder = "Inbox";
   private selectedTags: string[] = [];
+  private notebook = "";
 
   private plugin: StashpaperPlugin;
   private readonly onSubmit: (data: SaveArticleData) => Promise<void> | void;
@@ -125,7 +128,12 @@ export class SaveArticleModal extends Modal {
     this.createTagsPickerSetting(contentEl);
 
     // ------------------------------------------------------------------
-    // 5. Save / Cancel buttons with loading state & double-submit protection
+    // 5. Notebook Selector with Autocomplete
+    // ------------------------------------------------------------------
+    this.createNotebookPickerSetting(contentEl);
+
+    // ------------------------------------------------------------------
+    // 6. Save / Cancel buttons with loading state & double-submit protection
     // ------------------------------------------------------------------
     let isSaving = false;
     let saveBtnRef: ButtonComponent | null = null;
@@ -181,6 +189,7 @@ export class SaveArticleModal extends Modal {
                 url: this.url,
                 folder: targetFolder,
                 tags: [...this.selectedTags],
+                notebook: this.notebook.trim() || undefined,
               });
               this.close();
             } catch (err: unknown) {
@@ -797,6 +806,177 @@ export class SaveArticleModal extends Modal {
 
     // Initial render
     renderPills();
+  }
+
+  /**
+   * Builds the Notebook selector with autocomplete drawn from existing
+   * notebook values in the MetadataCache.
+   */
+  private createNotebookPickerSetting(containerEl: HTMLElement): void {
+    const notebookSetting = new Setting(containerEl)
+      .setName("Notebook")
+      .setDesc("Optional notebook name for grouping (independent of vault folder structure).");
+
+    const wrapper = notebookSetting.controlEl.createDiv({
+      cls: "stashpaper-control-wrapper stashpaper-notebook-wrapper",
+    });
+
+    const input = wrapper.createEl("input", {
+      type: "text",
+      cls: "stashpaper-folder-input stashpaper-notebook-input",
+      value: this.notebook,
+      placeholder: "e.g. Reading, Tech, Research (optional)",
+    });
+
+    const suggesterEl = wrapper.createDiv({
+      cls: "stashpaper-suggester",
+    });
+    suggesterEl.hide();
+
+    let highlightedIndex = -1;
+    let currentOptions: string[] = [];
+
+    const getAvailableNotebooks = (): string[] => {
+      const set = new Set<string>();
+      const mdFiles = this.app.vault.getMarkdownFiles();
+      for (const file of mdFiles) {
+        const cache = this.app.metadataCache.getFileCache(file);
+        const nb = cache?.frontmatter?.notebook;
+        if (typeof nb === "string" && nb.trim()) {
+          set.add(nb.trim());
+        }
+      }
+      return Array.from(set).sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" })
+      );
+    };
+
+    const renderNotebookSuggestions = (query: string) => {
+      suggesterEl.empty();
+      const allNotebooks = getAvailableNotebooks();
+      const q = query.toLowerCase().trim();
+
+      const matches = allNotebooks.filter((nb) =>
+        nb.toLowerCase().includes(q)
+      );
+
+      currentOptions = [...matches];
+
+      matches.forEach((nb, idx) => {
+        const itemEl = suggesterEl.createDiv({
+          cls: `stashpaper-suggester-item ${idx === highlightedIndex ? "is-selected" : ""}`,
+        });
+        itemEl.createSpan({ text: "📓 ", cls: "suggester-icon" });
+        itemEl.createSpan({ text: nb });
+
+        itemEl.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          selectNotebook(nb);
+        });
+      });
+
+      const hasExactMatch = allNotebooks.some(
+        (nb) => nb.toLowerCase() === q
+      );
+
+      if (!hasExactMatch && q.length > 0) {
+        const createCandidate = query.trim();
+        currentOptions.push(createCandidate);
+
+        const createEl = suggesterEl.createDiv({
+          cls: `stashpaper-suggester-item is-create ${currentOptions.length - 1 === highlightedIndex ? "is-selected" : ""}`,
+        });
+        createEl.createSpan({ text: "➕ ", cls: "suggester-icon" });
+        createEl.createSpan({ text: `Create notebook: "${createCandidate}"` });
+
+        createEl.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          selectNotebook(createCandidate);
+        });
+      }
+
+      if (currentOptions.length === 0) {
+        suggesterEl.createDiv({
+          text: "No existing notebooks found",
+          cls: "stashpaper-suggester-empty",
+        });
+      }
+
+      suggesterEl.show();
+    };
+
+    const selectNotebook = (nb: string) => {
+      this.notebook = nb;
+      input.value = nb;
+      suggesterEl.hide();
+      highlightedIndex = -1;
+    };
+
+    const scrollNotebookIntoView = () => {
+      if (Platform.isMobile) {
+        setTimeout(() => {
+          input.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 120);
+      }
+    };
+
+    input.addEventListener("focus", () => {
+      highlightedIndex = -1;
+      renderNotebookSuggestions(input.value);
+      scrollNotebookIntoView();
+    });
+
+    input.addEventListener("click", () => {
+      highlightedIndex = -1;
+      renderNotebookSuggestions(input.value);
+      scrollNotebookIntoView();
+    });
+
+    input.addEventListener("input", () => {
+      this.notebook = input.value;
+      highlightedIndex = -1;
+      renderNotebookSuggestions(input.value);
+      scrollNotebookIntoView();
+    });
+
+    input.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (suggesterEl.isShown()) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          highlightedIndex = Math.min(highlightedIndex + 1, currentOptions.length - 1);
+          renderNotebookSuggestions(input.value);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          highlightedIndex = Math.max(highlightedIndex - 1, 0);
+          renderNotebookSuggestions(input.value);
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          if (highlightedIndex >= 0 && currentOptions[highlightedIndex]) {
+            e.preventDefault();
+            selectNotebook(currentOptions[highlightedIndex]);
+            return;
+          }
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          suggesterEl.hide();
+        }
+      }
+    });
+
+    const outsideListener = (e: MouseEvent) => {
+      if (!wrapper.contains(e.target as Node)) {
+        suggesterEl.hide();
+        this.notebook = input.value.trim();
+      }
+    };
+    document.addEventListener("pointerdown", outsideListener);
+    this.documentListeners.push(() => {
+      document.removeEventListener("pointerdown", outsideListener);
+    });
   }
 
   onClose(): void {

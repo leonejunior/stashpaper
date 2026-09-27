@@ -147,7 +147,7 @@ export default class StashpaperPlugin extends Plugin {
    * Opens the Save Article modal with full fetch and note creation flow.
    */
   openSaveModal(): void {
-    new SaveArticleModal(this.app, this, async ({ url, folder, tags }) => {
+    new SaveArticleModal(this.app, this, async ({ url, folder, tags, notebook }) => {
       const progressNotice = new Notice("Stashpaper: fetching article…", 0);
 
       try {
@@ -162,7 +162,7 @@ export default class StashpaperPlugin extends Plugin {
           article,
           folder,
           tags,
-          { keepImages: this.settings.keepImages }
+          { keepImages: this.settings.keepImages, notebook }
         );
 
         // 3. Open the newly created note in the active pane

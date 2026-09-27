@@ -201,6 +201,10 @@ export class ReadingProgressTracker {
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
+      // Flush pending save immediately on leave so progress is never lost
+      if (this.trackedView && this.trackedFile) {
+        this.saveScrollProgress(this.trackedView, this.trackedFile);
+      }
     }
 
     this.trackedView = null;
@@ -229,10 +233,14 @@ export class ReadingProgressTracker {
    */
   private async saveScrollProgress(view: MarkdownView, file: TFile): Promise<void> {
     try {
-      const scrollFraction = view.previewMode?.getScroll() ?? 0;
-      // getScroll() already returns a value proportional to the max scroll,
-      // but its scale can be > 1 in some Obsidian versions (it's a pixel offset
-      // divided by the contentHeight). We clamp it.
+      let scrollFraction = view.previewMode?.getScroll() ?? 0;
+      // Fallback calculation using container scroll position if getScroll() is unavailable
+      if (!scrollFraction && this.scrollEl) {
+        const maxScroll = this.scrollEl.scrollHeight - this.scrollEl.clientHeight;
+        if (maxScroll > 0) {
+          scrollFraction = this.scrollEl.scrollTop / maxScroll;
+        }
+      }
       const progress = Math.max(0, Math.min(100, Math.round(scrollFraction * 100)));
 
       // Only write if changed by at least 1%
@@ -261,6 +269,17 @@ export class ReadingProgressTracker {
       view.previewMode?.applyScroll(fraction);
     } catch (err) {
       console.debug("Stashpaper: failed to restore scroll position", err);
+    }
+
+    // Direct container scrollTop fallback if applyScroll didn't move it
+    if (this.scrollEl) {
+      const maxScroll = this.scrollEl.scrollHeight - this.scrollEl.clientHeight;
+      if (maxScroll > 0) {
+        const targetPx = maxScroll * fraction;
+        if (Math.abs(this.scrollEl.scrollTop - targetPx) > 50) {
+          this.scrollEl.scrollTop = targetPx;
+        }
+      }
     }
   }
 

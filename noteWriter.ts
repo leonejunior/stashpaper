@@ -32,7 +32,8 @@ function buildFrontmatter(
   byline: string | undefined,
   dateSaved: string,
   tags: string[],
-  readingTimeMinutes?: number
+  readingTimeMinutes?: number,
+  notebook?: string
 ): string {
   const lines: string[] = ["---"];
 
@@ -49,6 +50,10 @@ function buildFrontmatter(
 
   if (readingTimeMinutes && readingTimeMinutes > 0) {
     lines.push(`reading_time_minutes: ${readingTimeMinutes}`);
+  }
+
+  if (notebook && notebook.trim()) {
+    lines.push(`notebook: '${notebook.trim().replace(/'/g, "''")}'`);
   }
 
   if (tags.length > 0) {
@@ -102,7 +107,7 @@ export async function writeArticleNote(
   article: ParsedArticle,
   folder: string,
   tags: string[],
-  options?: { keepImages?: boolean }
+  options?: { keepImages?: boolean; notebook?: string }
 ): Promise<TFile> {
   const dateSaved = todayISO();
   const stem = sanitizeFilename(article.title);
@@ -133,7 +138,8 @@ export async function writeArticleNote(
     article.byline,
     dateSaved,
     tags,
-    readingTimeMinutes
+    readingTimeMinutes,
+    options?.notebook
   );
   const content = `${frontmatter}\n\n${bodyMarkdown}\n`;
 

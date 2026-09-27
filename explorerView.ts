@@ -53,6 +53,7 @@ export class StashpaperExplorerView extends ItemView {
   private sortOrder: string = "date-desc";
   private groupByNotebook: boolean = false;
   private isTagDropdownOpen: boolean = false;
+  private collapsedNotebooks: Set<string> = new Set();
 
   // Cached data
   private allArticles: StashpaperArticleItem[] = [];
@@ -888,106 +889,209 @@ export class StashpaperExplorerView extends ItemView {
       return;
     }
 
-    // 4e. Render Article Cards
-    for (const article of filtered) {
-      const card = this.listEl.createDiv({
-        cls: "stashpaper-article-card",
-        attr: {
-          role: "button",
-          tabindex: "0",
-          "aria-label": `Open article ${article.title}`,
-        },
-      });
-
-      // Card Header: Title + Status Badge
-      const cardHeader = card.createDiv({ cls: "stashpaper-article-card-header" });
-      const titleEl = cardHeader.createDiv({
-        cls: "stashpaper-article-title",
-        text: article.title,
-      });
-
-      const statusBadge = cardHeader.createSpan({
-        cls: `stashpaper-status-badge status-${article.status}`,
-        text: article.status,
-      });
-
-      // Progress bar track (thin 3px line)
-      const progressTrack = card.createDiv({
-        cls: "stashpaper-article-progress-track",
-      });
-      const progressBar = progressTrack.createDiv({
-        cls: "stashpaper-article-progress-bar",
-      });
-      progressBar.style.width = `${article.progress}%`;
-
-      // Metadata row: Progress % / Reading time / Notebook / Date
-      const metaRow = card.createDiv({ cls: "stashpaper-article-meta" });
-
-      if (article.progress > 0) {
-        const progressLabel = metaRow.createSpan({
-          cls: "stashpaper-meta-item stashpaper-meta-progress",
-        });
-        progressLabel.setText(`${article.progress}%`);
-      }
-
-      if (article.readingTimeMinutes > 0) {
-        const timeLabel = metaRow.createSpan({
-          cls: "stashpaper-meta-item stashpaper-meta-reading-time",
-        });
-        timeLabel.setText(`${article.readingTimeMinutes} min`);
-      }
-
-      if (article.notebook) {
-        const notebookLabel = metaRow.createSpan({
-          cls: "stashpaper-meta-item stashpaper-meta-notebook",
-        });
-        notebookLabel.setText(article.notebook);
-      }
-
-      if (article.dateSaved) {
-        const dateLabel = metaRow.createSpan({
-          cls: "stashpaper-meta-item stashpaper-meta-date",
-        });
-        dateLabel.setText(article.dateSaved);
-      }
-
-      // Tag chips (one per tag)
-      if (article.tags.length > 0) {
-        const tagsContainer = card.createDiv({
-          cls: "stashpaper-article-tags",
-        });
-        for (const tag of article.tags) {
-          const pill = tagsContainer.createSpan({
-            cls: "stashpaper-tag-pill stashpaper-article-tag-chip",
-            text: `#${tag}`,
-          });
-
-          // Tapping a tag chip directly activates filtering by that tag
-          pill.addEventListener("click", (e) => {
-            e.stopPropagation();
-            if (!this.selectedTags.includes(tag)) {
-              this.selectedTags.push(tag);
-              this.updateTagTriggerButton();
-              if (this.isTagDropdownOpen) this.renderTagPopover();
-              this.renderArticles();
-            }
-          });
+    // 4e. Render Article Cards (grouped by notebook or flat list)
+    if (this.groupByNotebook) {
+      // Group articles by notebook (notes with no notebook go under "Uncategorized")
+      const groups = new Map<string, StashpaperArticleItem[]>();
+      for (const article of filtered) {
+        const groupName = article.notebook?.trim() || "Uncategorized";
+        let groupList = groups.get(groupName);
+        if (!groupList) {
+          groupList = [];
+          groups.set(groupName, groupList);
         }
+        groupList.push(article);
       }
 
-      // Click to open file in active leaf or new tab
-      const openArticle = async () => {
-        const leaf = this.app.workspace.getLeaf(false);
-        await leaf.openFile(article.file);
-      };
-
-      card.addEventListener("click", openArticle);
-      card.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          openArticle();
-        }
+      // Sort group names: named notebooks first (alphabetical), "Uncategorized" at the end
+      const groupNames = Array.from(groups.keys()).sort((a, b) => {
+        if (a === "Uncategorized") return 1;
+        if (b === "Uncategorized") return -1;
+        return a.localeCompare(b, undefined, { sensitivity: "base" });
       });
+
+      for (const groupName of groupNames) {
+        const groupArticles = groups.get(groupName) || [];
+        const isCollapsed = this.collapsedNotebooks.has(groupName);
+
+        const groupSection = this.listEl.createDiv({
+          cls: "stashpaper-notebook-group",
+        });
+
+        // Group Header
+        const groupHeader = groupSection.createDiv({
+          cls: `stashpaper-notebook-group-header ${isCollapsed ? "is-collapsed" : ""}`,
+          attr: {
+            role: "button",
+            tabindex: "0",
+            "aria-label": `Toggle notebook group ${groupName}`,
+          },
+        });
+
+        const chevronEl = groupHeader.createSpan({
+          cls: "stashpaper-group-chevron",
+        });
+        setIcon(chevronEl, isCollapsed ? "chevron-right" : "chevron-down");
+
+        const iconEl = groupHeader.createSpan({
+          cls: "stashpaper-group-icon",
+        });
+        setIcon(iconEl, groupName === "Uncategorized" ? "folder" : "book-open");
+
+        groupHeader.createSpan({
+          cls: "stashpaper-group-title",
+          text: groupName,
+        });
+
+        groupHeader.createSpan({
+          cls: "stashpaper-group-count",
+          text: String(groupArticles.length),
+        });
+
+        // Items container
+        const itemsContainer = groupSection.createDiv({
+          cls: `stashpaper-notebook-group-items ${isCollapsed ? "is-hidden" : ""}`,
+        });
+
+        for (const article of groupArticles) {
+          this.renderArticleCard(itemsContainer, article);
+        }
+
+        const toggleCollapse = () => {
+          if (this.collapsedNotebooks.has(groupName)) {
+            this.collapsedNotebooks.delete(groupName);
+            groupHeader.removeClass("is-collapsed");
+            itemsContainer.removeClass("is-hidden");
+            setIcon(chevronEl, "chevron-down");
+          } else {
+            this.collapsedNotebooks.add(groupName);
+            groupHeader.addClass("is-collapsed");
+            itemsContainer.addClass("is-hidden");
+            setIcon(chevronEl, "chevron-right");
+          }
+        };
+
+        groupHeader.addEventListener("click", toggleCollapse);
+        groupHeader.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleCollapse();
+          }
+        });
+      }
+    } else {
+      // Flat list per the current sort order
+      for (const article of filtered) {
+        this.renderArticleCard(this.listEl, article);
+      }
     }
   }
+
+  /**
+   * Renders a single article card with title, status, progress bar, tags, and click handler.
+   */
+  private renderArticleCard(
+    container: HTMLElement,
+    article: StashpaperArticleItem
+  ): void {
+    const card = container.createDiv({
+      cls: "stashpaper-article-card",
+      attr: {
+        role: "button",
+        tabindex: "0",
+        "aria-label": `Open article ${article.title}`,
+      },
+    });
+
+    // Card Header: Title + Status Badge
+    const cardHeader = card.createDiv({ cls: "stashpaper-article-card-header" });
+    cardHeader.createDiv({
+      cls: "stashpaper-article-title",
+      text: article.title,
+    });
+
+    cardHeader.createSpan({
+      cls: `stashpaper-status-badge status-${article.status}`,
+      text: article.status,
+    });
+
+    // Progress bar track (thin 3px line)
+    const progressTrack = card.createDiv({
+      cls: "stashpaper-article-progress-track",
+    });
+    const progressBar = progressTrack.createDiv({
+      cls: "stashpaper-article-progress-bar",
+    });
+    progressBar.style.width = `${article.progress}%`;
+
+    // Metadata row: Progress % / Reading time / Notebook / Date
+    const metaRow = card.createDiv({ cls: "stashpaper-article-meta" });
+
+    if (article.progress > 0) {
+      const progressLabel = metaRow.createSpan({
+        cls: "stashpaper-meta-item stashpaper-meta-progress",
+      });
+      progressLabel.setText(`${article.progress}%`);
+    }
+
+    if (article.readingTimeMinutes > 0) {
+      const timeLabel = metaRow.createSpan({
+        cls: "stashpaper-meta-item stashpaper-meta-reading-time",
+      });
+      timeLabel.setText(`${article.readingTimeMinutes} min`);
+    }
+
+    if (article.notebook) {
+      const notebookLabel = metaRow.createSpan({
+        cls: "stashpaper-meta-item stashpaper-meta-notebook",
+      });
+      notebookLabel.setText(article.notebook);
+    }
+
+    if (article.dateSaved) {
+      const dateLabel = metaRow.createSpan({
+        cls: "stashpaper-meta-item stashpaper-meta-date",
+      });
+      dateLabel.setText(article.dateSaved);
+    }
+
+    // Tag chips (one per tag)
+    if (article.tags.length > 0) {
+      const tagsContainer = card.createDiv({
+        cls: "stashpaper-article-tags",
+      });
+      for (const tag of article.tags) {
+        const pill = tagsContainer.createSpan({
+          cls: "stashpaper-tag-pill stashpaper-article-tag-chip",
+          text: `#${tag}`,
+        });
+
+        // Tapping a tag chip directly activates filtering by that tag
+        pill.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!this.selectedTags.includes(tag)) {
+            this.selectedTags.push(tag);
+            this.updateTagTriggerButton();
+            if (this.isTagDropdownOpen) this.renderTagPopover();
+            this.renderArticles();
+          }
+        });
+      }
+    }
+
+    // Click to open file in active leaf or new tab
+    const openArticle = async () => {
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(article.file);
+    };
+
+    card.addEventListener("click", openArticle);
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openArticle();
+      }
+    });
+  }
 }
+
