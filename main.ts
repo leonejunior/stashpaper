@@ -1,4 +1,5 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import { STASHPAPER_EXPLORER_VIEW, StashpaperExplorerView } from "./explorerView";
 import { fetchAndParseArticle } from "./fetcher";
 import { SaveArticleModal } from "./modal";
 import { writeArticleNote } from "./noteWriter";
@@ -28,6 +29,12 @@ export default class StashpaperPlugin extends Plugin {
     // 3. Register settings tab
     this.addSettingTab(new StashpaperSettingTab(this.app, this));
 
+    // 4. Register dedicated sidebar Explorer View
+    this.registerView(
+      STASHPAPER_EXPLORER_VIEW,
+      (leaf) => new StashpaperExplorerView(leaf, this)
+    );
+
     new Notice("Stashpaper loaded");
 
     // ------------------------------------------------------------------
@@ -35,6 +42,10 @@ export default class StashpaperPlugin extends Plugin {
     // ------------------------------------------------------------------
     this.addRibbonIcon("bookmark", "Stashpaper: Save article", () => {
       this.openSaveModal();
+    });
+
+    this.addRibbonIcon("book-open", "Stashpaper: Open reading list", () => {
+      this.activateExplorerView();
     });
 
     // ------------------------------------------------------------------
@@ -46,6 +57,18 @@ export default class StashpaperPlugin extends Plugin {
       name: "Stashpaper: Save article",
       callback: () => {
         this.openSaveModal();
+      },
+    });
+
+    // ------------------------------------------------------------------
+    // Command: Open reading list
+    // Opens or focuses the Stashpaper Explorer view in the right sidebar.
+    // ------------------------------------------------------------------
+    this.addCommand({
+      id: "stashpaper-open-reading-list",
+      name: "Stashpaper: Open reading list",
+      callback: () => {
+        this.activateExplorerView();
       },
     });
 
@@ -66,6 +89,32 @@ export default class StashpaperPlugin extends Plugin {
         }
       },
     });
+  }
+
+  /**
+   * Opens or reveals the Stashpaper Explorer sidebar view.
+   * If already open, focuses existing leaf rather than creating a duplicate.
+   */
+  async activateExplorerView(): Promise<void> {
+    const { workspace } = this.app;
+    let leaf: WorkspaceLeaf | null = null;
+    const leaves = workspace.getLeavesOfType(STASHPAPER_EXPLORER_VIEW);
+
+    if (leaves.length > 0) {
+      leaf = leaves[0];
+    } else {
+      leaf = workspace.getRightLeaf(false);
+      if (leaf) {
+        await leaf.setViewState({
+          type: STASHPAPER_EXPLORER_VIEW,
+          active: true,
+        });
+      }
+    }
+
+    if (leaf) {
+      workspace.revealLeaf(leaf);
+    }
   }
 
   /**
@@ -156,6 +205,7 @@ export default class StashpaperPlugin extends Plugin {
 
   onunload() {
     console.log("Stashpaper unloaded");
+    this.app.workspace.detachLeavesOfType(STASHPAPER_EXPLORER_VIEW);
     new Notice("Stashpaper unloaded");
   }
 }

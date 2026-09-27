@@ -335,3 +335,677 @@
   }
 }
 
+/* ==========================================================================
+   Stashpaper Explorer Sidebar View Styles
+   ========================================================================== */
+
+.stashpaper-explorer-container {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  background-color: var(--background-primary) !important;
+}
+
+/* ── Sticky Header Controls ── */
+.stashpaper-explorer-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 10px 14px;
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  position: relative;
+  z-index: 15;
+}
+
+/* ── Search Bar ── */
+.stashpaper-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.stashpaper-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.6;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.stashpaper-search-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.stashpaper-search-input {
+  width: 100% !important;
+  padding: 7px 30px 7px 32px !important;
+  border-radius: var(--radius-m, 6px) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  background-color: var(--background-primary) !important;
+  font-size: var(--font-ui-small, 13px) !important;
+  color: var(--text-normal) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stashpaper-search-input:focus {
+  border-color: var(--interactive-accent) !important;
+  box-shadow: 0 0 0 1px var(--interactive-accent) !important;
+}
+
+.stashpaper-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.stashpaper-search-clear svg {
+  width: 13px;
+  height: 13px;
+}
+
+.stashpaper-search-clear:hover {
+  opacity: 1;
+  background-color: var(--background-modifier-hover);
+}
+
+.stashpaper-search-clear.is-hidden {
+  display: none !important;
+}
+
+/* ── Filter Row ── */
+.stashpaper-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  align-items: center;
+}
+
+.stashpaper-filter-item {
+  flex: 1 1 calc(33.333% - 6px);
+  min-width: 85px;
+}
+
+.stashpaper-dropdown {
+  width: 100% !important;
+  height: 32px !important;
+  font-size: 12px !important;
+  padding: 2px 6px !important;
+  border-radius: var(--radius-s, 4px) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  background-color: var(--background-primary) !important;
+  color: var(--text-normal) !important;
+  text-overflow: ellipsis;
+}
+
+.stashpaper-dropdown:focus {
+  border-color: var(--interactive-accent) !important;
+}
+
+.stashpaper-tag-trigger-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  width: 100% !important;
+  height: 32px !important;
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  border-radius: var(--radius-s, 4px) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  background-color: var(--background-primary) !important;
+  color: var(--text-normal) !important;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.15s ease;
+}
+
+.stashpaper-tag-trigger-btn:hover {
+  background-color: var(--background-modifier-hover) !important;
+}
+
+.stashpaper-tag-trigger-btn.is-active {
+  border-color: #a68af9 !important;
+  background-color: rgba(166, 138, 249, 0.15) !important;
+  color: #a68af9 !important;
+  font-weight: 500 !important;
+}
+
+.stashpaper-tag-btn-icon svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.8;
+  vertical-align: middle;
+}
+
+/* ── Tag Popover Dropdown ── */
+.stashpaper-tag-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 12px;
+  right: 12px;
+  z-index: 50;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  padding: 8px;
+  max-height: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stashpaper-tag-popover.is-hidden {
+  display: none !important;
+}
+
+.stashpaper-tag-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 6px;
+}
+
+.stashpaper-tag-popover-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stashpaper-tag-popover-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stashpaper-tag-popover-action-btn {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-accent) !important;
+  font-size: 11px !important;
+  cursor: pointer;
+  padding: 2px 4px !important;
+  box-shadow: none !important;
+}
+
+.stashpaper-tag-popover-close {
+  cursor: pointer;
+  opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+}
+
+.stashpaper-tag-popover-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.stashpaper-tag-popover-close:hover {
+  opacity: 1;
+}
+
+.stashpaper-tag-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  max-height: 190px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.stashpaper-tag-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+  user-select: none;
+}
+
+.stashpaper-tag-popover-item:hover,
+.stashpaper-tag-popover-item.is-selected {
+  background-color: var(--background-modifier-hover);
+}
+
+.stashpaper-tag-checkbox {
+  margin: 0 !important;
+  cursor: pointer;
+}
+
+.stashpaper-tag-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-normal);
+}
+
+.stashpaper-tag-popover-item.is-selected .stashpaper-tag-name {
+  color: #a68af9;
+  font-weight: 500;
+}
+
+.stashpaper-tag-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.stashpaper-tag-popover-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 10px;
+  text-align: center;
+}
+
+/* ── Active Tags Row ── */
+.stashpaper-active-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.stashpaper-active-tags-row.is-hidden {
+  display: none !important;
+}
+
+.stashpaper-active-tags-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.stashpaper-active-tags-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.stashpaper-tag-pill.is-filter-pill {
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+.stashpaper-clear-all-tags-btn {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0 4px !important;
+  box-shadow: none !important;
+}
+
+.stashpaper-clear-all-tags-btn:hover {
+  color: var(--text-normal) !important;
+}
+
+/* ── Secondary Controls: Sort & Notebook Grouping Toggle ── */
+.stashpaper-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.stashpaper-sort-wrapper {
+  flex: 1 1 auto;
+}
+
+.stashpaper-toggle-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.stashpaper-toggle-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ── Stats & Summary Row ── */
+.stashpaper-stats-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-height: 18px;
+}
+
+.stashpaper-clear-filters-link {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-accent) !important;
+  font-size: 11px !important;
+  cursor: pointer;
+  padding: 0 !important;
+  box-shadow: none !important;
+  text-decoration: underline;
+}
+
+/* ── Articles List Container ── */
+.stashpaper-articles-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px 14px 30px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Article Card ── */
+.stashpaper-article-card {
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 8px);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+.stashpaper-article-card:hover {
+  border-color: rgba(166, 138, 249, 0.45);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.stashpaper-article-card:active {
+  transform: translateY(0);
+  background-color: var(--background-modifier-hover);
+}
+
+.stashpaper-article-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.stashpaper-article-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-normal);
+  flex: 1;
+  word-break: break-word;
+}
+
+.stashpaper-article-card:hover .stashpaper-article-title {
+  color: var(--text-accent);
+}
+
+/* ── Status Badge ── */
+.stashpaper-status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.stashpaper-status-badge.status-unread {
+  background-color: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.stashpaper-status-badge.status-reading {
+  background-color: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.stashpaper-status-badge.status-done {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+/* ── Thin Progress Bar ── */
+.stashpaper-article-progress-track {
+  width: 100%;
+  height: 3px;
+  background-color: var(--background-modifier-border);
+  border-radius: 9999px;
+  overflow: hidden;
+  margin: 1px 0;
+}
+
+.stashpaper-article-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #8b5cf6, #ec4899);
+  border-radius: 9999px;
+  transition: width 0.25s ease;
+  min-width: 0;
+}
+
+/* ── Article Metadata ── */
+.stashpaper-article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.stashpaper-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.stashpaper-meta-progress {
+  color: #a68af9;
+  font-weight: 500;
+}
+
+.stashpaper-meta-notebook {
+  background-color: var(--background-modifier-form-field);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  font-size: 11px;
+}
+
+.stashpaper-meta-date {
+  opacity: 0.7;
+  margin-left: auto;
+}
+
+/* ── Card Tag Chips ── */
+.stashpaper-article-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.stashpaper-article-tag-chip {
+  font-size: 11px !important;
+  padding: 2px 7px !important;
+  cursor: pointer !important;
+  transition: transform 0.1s ease, background-color 0.15s ease !important;
+}
+
+.stashpaper-article-tag-chip:hover {
+  transform: scale(1.05);
+  background-color: #2e263d !important;
+}
+
+.theme-light .stashpaper-article-tag-chip:hover {
+  background-color: #e8e1fc !important;
+}
+
+/* ── Empty States ── */
+.stashpaper-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 16px;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.stashpaper-empty-icon {
+  width: 48px;
+  height: 48px;
+  opacity: 0.45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.stashpaper-empty-icon svg {
+  width: 42px;
+  height: 42px;
+}
+
+.stashpaper-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.stashpaper-empty-desc {
+  font-size: 13px;
+  max-width: 250px;
+  line-height: 1.45;
+}
+
+.stashpaper-empty-btn,
+.stashpaper-clear-filters-btn {
+  margin-top: 8px;
+  cursor: pointer;
+  border-radius: var(--radius-m, 6px) !important;
+}
+
+/* ==========================================================================
+   Mobile & Touchscreen Responsive Enhancements
+   ========================================================================== */
+
+.is-mobile .stashpaper-explorer-header,
+.is-phone .stashpaper-explorer-header,
+@media (max-width: 650px) {
+  .stashpaper-explorer-header {
+    padding: 10px 10px 8px 10px;
+    gap: 7px;
+  }
+
+  .stashpaper-search-input {
+    font-size: 16px !important; /* Prevents auto-zoom on mobile browsers */
+    height: 40px !important;
+    padding: 6px 30px 6px 32px !important;
+  }
+
+  /* Filter row adapts dynamically to mobile width */
+  .stashpaper-filter-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .stashpaper-tag-filter-wrapper {
+    grid-column: span 2 !important;
+  }
+
+  .stashpaper-dropdown,
+  .stashpaper-tag-trigger-btn {
+    height: 38px !important;
+    font-size: 13px !important;
+  }
+
+  .stashpaper-tag-popover {
+    left: 8px !important;
+    right: 8px !important;
+    max-height: 280px !important;
+  }
+
+  .stashpaper-tag-popover-item {
+    min-height: 38px !important;
+    padding: 8px 10px !important;
+  }
+
+  .stashpaper-controls-row {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .stashpaper-sort-wrapper {
+    width: 100% !important;
+  }
+
+  .stashpaper-toggle-wrapper {
+    width: 100% !important;
+    justify-content: space-between !important;
+    padding: 2px 0 !important;
+  }
+
+  .stashpaper-articles-list {
+    padding: 10px 10px 24px 10px;
+    gap: 8px;
+  }
+
+  .stashpaper-article-card {
+    padding: 12px 12px;
+  }
+
+  .stashpaper-article-title {
+    font-size: 15px;
+  }
+
+  .stashpaper-article-tag-chip {
+    font-size: 12px !important;
+    padding: 4px 9px !important;
+  }
+}
+
+
