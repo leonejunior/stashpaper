@@ -1,6 +1,6 @@
-import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import { Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { STASHPAPER_EXPLORER_VIEW, StashpaperExplorerView } from "./explorerView";
-import { fetchAndParseArticle } from "./fetcher";
+import { fetchAndParseArticle, stripMarkdownImages } from "./fetcher";
 import { SaveArticleModal } from "./modal";
 import { writeArticleNote } from "./noteWriter";
 import { ReadingProgressTracker } from "./progressTracker";
@@ -90,6 +90,24 @@ export default class StashpaperPlugin extends Plugin {
           console.error(e);
           new Notice("Stashpaper fetch test failed — check console");
         }
+      },
+    });
+
+    // ------------------------------------------------------------------
+    // Command: Re-fetch article
+    // ------------------------------------------------------------------
+    this.addCommand({
+      id: "stashpaper-refetch-article",
+      name: "Stashpaper: Re-fetch this article",
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return false;
+        const cache = this.app.metadataCache.getFileCache(file);
+        if (!cache?.frontmatter?.source_url) return false;
+        if (!checking) {
+          this.refetchArticle(file);
+        }
+        return true;
       },
     });
 
@@ -192,6 +210,64 @@ export default class StashpaperPlugin extends Plugin {
         throw e;
       }
     }).open();
+  }
+
+  /**
+   * Re-fetches the article for a specific note from its frontmatter source_url,
+   * refreshing content and reading time while preserving existing metadata.
+   */
+  async refetchArticle(file: TFile): Promise<void> {
+    const cache = this.app.metadataCache.getFileCache(file);
+    const sourceUrl = cache?.frontmatter?.source_url;
+    if (!sourceUrl || typeof sourceUrl !== "string") {
+      new Notice("Stashpaper: note has no source_url in frontmatter");
+      return;
+    }
+
+    const progressNotice = new Notice("Stashpaper: re-fetching article…", 0);
+    try {
+      const article = await fetchAndParseArticle(sourceUrl, {
+        keepImages: this.settings.keepImages,
+      });
+
+      const bodyMarkdown =
+        this.settings.keepImages === false
+          ? stripMarkdownImages(article.markdown)
+          : article.markdown;
+
+      const wordCount = bodyMarkdown.trim().split(/\s+/).length;
+      const readingTimeMinutes = Math.max(1, Math.round(wordCount / 200));
+
+      const rawContent = await this.app.vault.read(file);
+      const fmMatch = rawContent.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+
+      if (fmMatch) {
+        await this.app.fileManager.processFrontMatter(file, (fm) => {
+          if (article.title) fm.title = article.title;
+          if (article.byline) fm.author = article.byline;
+          fm.reading_time_minutes = readingTimeMinutes;
+        });
+
+        const updated = await this.app.vault.read(file);
+        const newFmMatch = updated.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+        const fmBlock = newFmMatch ? newFmMatch[0] : "---\n---\n";
+        const newContent = `${fmBlock.trimEnd()}\n\n${bodyMarkdown}\n`;
+        await this.app.vault.modify(file, newContent);
+      } else {
+        const newContent = `${bodyMarkdown}\n`;
+        await this.app.vault.modify(file, newContent);
+      }
+
+      progressNotice.hide();
+      new Notice(`Article re-fetched: ${article.title}`);
+    } catch (e: unknown) {
+      progressNotice.hide();
+      const raw = e instanceof Error ? e.message : String(e);
+      const message = raw.split("\n")[0].replace(/^Error:\s*/, "");
+      console.error("Stashpaper: re-fetch failed", e);
+      new Notice(`Stashpaper: failed to re-fetch — ${message}`, 8000);
+      throw e;
+    }
   }
 
   async loadSettings() {

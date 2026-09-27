@@ -4,8 +4,15 @@ import {
   TFile,
   setIcon,
   ToggleComponent,
+  Menu,
+  Notice,
 } from "obsidian";
 import type StashpaperPlugin from "./main";
+import {
+  ChangeNotebookModal,
+  ManageTagsModal,
+  ConfirmDeleteModal,
+} from "./explorerModals";
 
 export const STASHPAPER_EXPLORER_VIEW = "stashpaper-explorer-view";
 
@@ -54,6 +61,8 @@ export class StashpaperExplorerView extends ItemView {
   private groupByNotebook: boolean = false;
   private isTagDropdownOpen: boolean = false;
   private collapsedNotebooks: Set<string> = new Set();
+  private selectedArticlePaths: Set<string> = new Set();
+  private lastClickedArticlePath: string | null = null;
 
   // Cached data
   private allArticles: StashpaperArticleItem[] = [];
@@ -154,6 +163,22 @@ export class StashpaperExplorerView extends ItemView {
       }
     };
     document.addEventListener("click", this.documentClickHandler);
+
+    // Escape key clears multi-selection
+    this.registerDomEvent(window, "keydown", (e: KeyboardEvent) => {
+      if (e.key === "Escape" && this.selectedArticlePaths.size > 0) {
+        this.selectedArticlePaths.clear();
+        this.updateCardSelectionVisuals();
+      }
+    });
+
+    // Clicking empty space in list clears selection
+    this.listEl.addEventListener("click", (e: MouseEvent) => {
+      if (e.target === this.listEl && this.selectedArticlePaths.size > 0) {
+        this.selectedArticlePaths.clear();
+        this.updateCardSelectionVisuals();
+      }
+    });
 
     // Initial data load and render
     this.refreshData();
@@ -860,6 +885,26 @@ export class StashpaperExplorerView extends ItemView {
           }`
         );
       }
+
+      // Multi-select banner in stats row
+      if (this.selectedArticlePaths.size > 0) {
+        const banner = this.statsRowEl.createDiv({
+          cls: "stashpaper-selection-banner",
+        });
+        banner.createSpan({
+          cls: "stashpaper-selection-count",
+          text: `${this.selectedArticlePaths.size} selected`,
+        });
+        const deselectBtn = banner.createEl("button", {
+          cls: "stashpaper-selection-clear-btn",
+          text: "Deselect all",
+          attr: { type: "button" },
+        });
+        deselectBtn.addEventListener("click", () => {
+          this.selectedArticlePaths.clear();
+          this.updateCardSelectionVisuals();
+        });
+      }
     }
 
     // ── Render article list or empty state ──
@@ -1016,8 +1061,9 @@ export class StashpaperExplorerView extends ItemView {
     container: HTMLElement,
     article: StashpaperArticleItem
   ): void {
+    const isSelected = this.selectedArticlePaths.has(article.file.path);
     const card = container.createDiv({
-      cls: "stashpaper-article-card",
+      cls: `stashpaper-article-card ${isSelected ? "is-selected" : ""}`,
       attr: {
         role: "button",
         tabindex: "0",
@@ -1108,11 +1154,118 @@ export class StashpaperExplorerView extends ItemView {
       await leaf.openFile(article.file, { state: { mode: "preview" } });
     };
 
-    card.addEventListener("click", openArticle);
-    card.addEventListener("keydown", (e) => {
+    // Left click handling (with multi-select & range select support)
+    card.addEventListener("click", async (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest(".stashpaper-article-tag-chip")) {
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.selectedArticlePaths.has(article.file.path)) {
+          this.selectedArticlePaths.delete(article.file.path);
+        } else {
+          this.selectedArticlePaths.add(article.file.path);
+        }
+        this.lastClickedArticlePath = article.file.path;
+        this.updateCardSelectionVisuals();
+        return;
+      }
+
+      if (e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleRangeSelect(article.file.path);
+        this.updateCardSelectionVisuals();
+        return;
+      }
+
+      if (this.selectedArticlePaths.size > 0) {
+        this.selectedArticlePaths.clear();
+        this.updateCardSelectionVisuals();
+      }
+
+      this.lastClickedArticlePath = article.file.path;
+      await openArticle();
+    });
+
+    // Right-click context menu
+    card.addEventListener("contextmenu", (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!this.selectedArticlePaths.has(article.file.path)) {
+        this.selectedArticlePaths.clear();
+        this.selectedArticlePaths.add(article.file.path);
+        this.lastClickedArticlePath = article.file.path;
+        this.updateCardSelectionVisuals();
+      }
+
+      this.openContextMenu(e);
+    });
+
+    // Touch / Mobile long-press support
+    let longPressTimer: number | null = null;
+    let startX = 0;
+    let startY = 0;
+
+    card.addEventListener(
+      "touchstart",
+      (e: TouchEvent) => {
+        if (e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+
+        longPressTimer = window.setTimeout(() => {
+          longPressTimer = null;
+          if (!this.selectedArticlePaths.has(article.file.path)) {
+            this.selectedArticlePaths.clear();
+            this.selectedArticlePaths.add(article.file.path);
+            this.lastClickedArticlePath = article.file.path;
+            this.updateCardSelectionVisuals();
+          }
+          this.openContextMenuAtPosition(touch.clientX, touch.clientY);
+        }, 500);
+      },
+      { passive: true }
+    );
+
+    card.addEventListener(
+      "touchmove",
+      (e: TouchEvent) => {
+        if (!longPressTimer) return;
+        const touch = e.touches[0];
+        if (
+          Math.abs(touch.clientX - startX) > 10 ||
+          Math.abs(touch.clientY - startY) > 10
+        ) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      },
+      { passive: true }
+    );
+
+    card.addEventListener("touchend", () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    });
+
+    card.addEventListener("touchcancel", () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    });
+
+    card.addEventListener("keydown", async (e: KeyboardEvent) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        openArticle();
+        await openArticle();
       }
     });
   }
@@ -1168,4 +1321,235 @@ export class StashpaperExplorerView extends ItemView {
       }
     }
   }
+
+  /**
+   * Handles Shift-click range selection between last clicked article and target.
+   */
+  private handleRangeSelect(targetPath: string): void {
+    const visibleArticles = this.filterAndSortArticles();
+    const visiblePaths = visibleArticles.map((a) => a.file.path);
+
+    const targetIdx = visiblePaths.indexOf(targetPath);
+    if (targetIdx === -1) return;
+
+    let startIdx = targetIdx;
+    if (this.lastClickedArticlePath) {
+      const prevIdx = visiblePaths.indexOf(this.lastClickedArticlePath);
+      if (prevIdx !== -1) {
+        startIdx = prevIdx;
+      }
+    }
+
+    const minIdx = Math.min(startIdx, targetIdx);
+    const maxIdx = Math.max(startIdx, targetIdx);
+
+    for (let i = minIdx; i <= maxIdx; i++) {
+      this.selectedArticlePaths.add(visiblePaths[i]);
+    }
+    this.lastClickedArticlePath = targetPath;
+  }
+
+  /**
+   * Updates visual selected state on cards in the DOM and refreshes selection banner.
+   */
+  private updateCardSelectionVisuals(): void {
+    const allCards = this.listEl.querySelectorAll<HTMLElement>(
+      ".stashpaper-article-card"
+    );
+    allCards.forEach((card) => {
+      const path = card.getAttribute("data-file-path");
+      if (path && this.selectedArticlePaths.has(path)) {
+        card.addClass("is-selected");
+      } else {
+        card.removeClass("is-selected");
+      }
+    });
+
+    let banner = this.statsRowEl.querySelector<HTMLElement>(
+      ".stashpaper-selection-banner"
+    );
+    if (this.selectedArticlePaths.size > 0) {
+      if (!banner) {
+        banner = this.statsRowEl.createDiv({
+          cls: "stashpaper-selection-banner",
+        });
+      }
+      banner.empty();
+      banner.createSpan({
+        cls: "stashpaper-selection-count",
+        text: `${this.selectedArticlePaths.size} selected`,
+      });
+      const deselectBtn = banner.createEl("button", {
+        cls: "stashpaper-selection-clear-btn",
+        text: "Deselect all",
+        attr: { type: "button" },
+      });
+      deselectBtn.addEventListener("click", () => {
+        this.selectedArticlePaths.clear();
+        this.updateCardSelectionVisuals();
+      });
+    } else if (banner) {
+      banner.remove();
+    }
+  }
+
+  /**
+   * Opens native Obsidian context menu at MouseEvent position.
+   */
+  private openContextMenu(e: MouseEvent): void {
+    const menu = this.buildContextMenu();
+    menu.showAtMouseEvent(e);
+  }
+
+  /**
+   * Opens native Obsidian context menu at screen coordinates (for mobile touch).
+   */
+  private openContextMenuAtPosition(x: number, y: number): void {
+    const menu = this.buildContextMenu();
+    menu.showAtPosition({ x, y });
+  }
+
+  /**
+   * Constructs the native Menu with appropriate single vs. multi-select items.
+   */
+  private buildContextMenu(): Menu {
+    const selectedArticles = this.allArticles.filter((a) =>
+      this.selectedArticlePaths.has(a.file.path)
+    );
+    if (selectedArticles.length === 0) return new Menu();
+
+    const isSingle = selectedArticles.length === 1;
+    const targetArticle = selectedArticles[0];
+    const menu = new Menu();
+
+    // 1. "Open" — single article only
+    if (isSingle) {
+      menu.addItem((item) => {
+        item
+          .setTitle("Open")
+          .setIcon("book-open")
+          .onClick(async () => {
+            const leaf = this.app.workspace.getLeaf(false);
+            await leaf.openFile(targetArticle.file, { state: { mode: "preview" } });
+          });
+      });
+    }
+
+    // 2. "Archive" — sets status to done directly
+    menu.addItem((item) => {
+      item
+        .setTitle(
+          isSingle ? "Archive" : `Archive (${selectedArticles.length} articles)`
+        )
+        .setIcon("check-circle")
+        .onClick(async () => {
+          for (const art of selectedArticles) {
+            await this.app.fileManager.processFrontMatter(art.file, (fm) => {
+              fm.status = "done";
+              fm.progress = 100;
+            });
+            art.status = "done";
+            art.progress = 100;
+            this.patchCardInPlace(art.file.path, 100, "done");
+          }
+          this.refreshData();
+          new Notice(
+            isSingle
+              ? `Archived "${targetArticle.title}"`
+              : `Archived ${selectedArticles.length} articles`
+          );
+        });
+    });
+
+    // 3. "Re-fetch article" — single article only
+    if (isSingle) {
+      menu.addItem((item) => {
+        item
+          .setTitle("Re-fetch article")
+          .setIcon("refresh-cw")
+          .onClick(async () => {
+            try {
+              await this.plugin.refetchArticle(targetArticle.file);
+              this.refreshData();
+            } catch {
+              // notice shown inside refetchArticle
+            }
+          });
+      });
+    }
+
+    // 4. "Change notebook..." — single & bulk
+    menu.addItem((item) => {
+      item
+        .setTitle(
+          isSingle
+            ? "Change notebook..."
+            : `Change notebook (${selectedArticles.length} articles)...`
+        )
+        .setIcon("book")
+        .onClick(() => {
+          new ChangeNotebookModal(
+            this.app,
+            this.plugin,
+            selectedArticles,
+            async () => {
+              this.refreshData();
+            }
+          ).open();
+        });
+    });
+
+    // 5. "Manage tags..." — single & bulk
+    menu.addItem((item) => {
+      item
+        .setTitle(
+          isSingle
+            ? "Manage tags..."
+            : `Manage tags (${selectedArticles.length} articles)...`
+        )
+        .setIcon("tag")
+        .onClick(() => {
+          new ManageTagsModal(
+            this.app,
+            this.plugin,
+            selectedArticles,
+            async () => {
+              this.refreshData();
+            }
+          ).open();
+        });
+    });
+
+    // 6. "Delete article" — single & bulk confirmation
+    menu.addSeparator();
+    menu.addItem((item) => {
+      item
+        .setTitle(
+          isSingle ? "Delete article" : `Delete ${selectedArticles.length} articles`
+        )
+        .setIcon("trash-2")
+        .setWarning(true)
+        .onClick(() => {
+          new ConfirmDeleteModal(
+            this.app,
+            selectedArticles,
+            async () => {
+              for (const art of selectedArticles) {
+                await this.app.vault.delete(art.file);
+              }
+              this.selectedArticlePaths.clear();
+              this.refreshData();
+              new Notice(
+                isSingle
+                  ? `Deleted "${targetArticle.title}"`
+                  : `Deleted ${selectedArticles.length} articles`
+              );
+            }
+          ).open();
+        });
+    });
+
+    return menu;
+  }
+
 }
