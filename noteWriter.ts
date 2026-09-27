@@ -31,7 +31,8 @@ function buildFrontmatter(
   sourceUrl: string,
   byline: string | undefined,
   dateSaved: string,
-  tags: string[]
+  tags: string[],
+  readingTimeMinutes?: number
 ): string {
   const lines: string[] = ["---"];
 
@@ -44,6 +45,11 @@ function buildFrontmatter(
 
   lines.push(`date_saved: ${dateSaved}`);
   lines.push(`status: unread`);
+  lines.push(`progress: 0`);
+
+  if (readingTimeMinutes && readingTimeMinutes > 0) {
+    lines.push(`reading_time_minutes: ${readingTimeMinutes}`);
+  }
 
   if (tags.length > 0) {
     lines.push("tags:");
@@ -116,13 +122,18 @@ export async function writeArticleNote(
       ? stripMarkdownImages(article.markdown)
       : article.markdown;
 
+  // Estimate reading time: ~200 words/min average reading speed
+  const wordCount = bodyMarkdown.trim().split(/\s+/).length;
+  const readingTimeMinutes = Math.max(1, Math.round(wordCount / 200));
+
   // ── 2. Build content
   const frontmatter = buildFrontmatter(
     article.title,
     article.sourceUrl,
     article.byline,
     dateSaved,
-    tags
+    tags,
+    readingTimeMinutes
   );
   const content = `${frontmatter}\n\n${bodyMarkdown}\n`;
 

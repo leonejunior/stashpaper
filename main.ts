@@ -3,6 +3,7 @@ import { STASHPAPER_EXPLORER_VIEW, StashpaperExplorerView } from "./explorerView
 import { fetchAndParseArticle } from "./fetcher";
 import { SaveArticleModal } from "./modal";
 import { writeArticleNote } from "./noteWriter";
+import { ReadingProgressTracker } from "./progressTracker";
 import {
   DEFAULT_SETTINGS,
   StashpaperSettingTab,
@@ -16,6 +17,8 @@ const TEST_ARTICLE_URL = "https://overreacted.io/before-you-memo/";
 
 export default class StashpaperPlugin extends Plugin {
   settings: StashpaperSettings;
+  private progressTracker: ReadingProgressTracker | null = null;
+  private statusBarEl: HTMLElement | null = null;
 
   async onload() {
     console.log("Stashpaper loaded");
@@ -89,6 +92,29 @@ export default class StashpaperPlugin extends Plugin {
         }
       },
     });
+
+    // ------------------------------------------------------------------
+    // Reading progress tracking: status bar + scroll listener
+    // ------------------------------------------------------------------
+    this.statusBarEl = this.addStatusBarItem();
+    this.statusBarEl.style.display = "none";
+    this.statusBarEl.addClass("stashpaper-status-bar");
+
+    this.progressTracker = new ReadingProgressTracker(this.app, this.statusBarEl);
+
+    // Fire on every leaf activation (tab/pane switch)
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        this.progressTracker?.onActiveLeafChange(leaf);
+      })
+    );
+
+    // Fire when view mode toggles (source ↔ reading)
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => {
+        this.progressTracker?.onLayoutChange();
+      })
+    );
   }
 
   /**
@@ -205,6 +231,7 @@ export default class StashpaperPlugin extends Plugin {
 
   onunload() {
     console.log("Stashpaper unloaded");
+    this.progressTracker?.destroy();
     this.app.workspace.detachLeavesOfType(STASHPAPER_EXPLORER_VIEW);
     new Notice("Stashpaper unloaded");
   }
