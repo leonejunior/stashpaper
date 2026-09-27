@@ -33,6 +33,7 @@ export async function patchProgressFrontmatter(
   file: TFile,
   newProgress: number
 ): Promise<void> {
+  let finalStatus = progressToStatus(newProgress);
   await app.fileManager.processFrontMatter(file, (fm) => {
     fm["progress"] = newProgress;
 
@@ -40,8 +41,14 @@ export async function patchProgressFrontmatter(
     const current = typeof fm["status"] === "string" ? fm["status"] : "unread";
     if (shouldUpdateStatus(current, candidate)) {
       fm["status"] = candidate;
+      finalStatus = candidate;
+    } else {
+      finalStatus = current;
     }
   });
+
+  // Notify any active views (such as Explorer) for instant live UI update
+  app.workspace.trigger("stashpaper:progress-updated", file.path, newProgress, finalStatus);
 }
 
 /**
@@ -97,7 +104,10 @@ export class ReadingProgressTracker {
   private attachedElements: HTMLElement[] = [];
   private scrollHandler: (() => void) | null = null;
   private debounceTimer: number | null = null;
-  private readonly DEBOUNCE_MS = 2000;
+  private isTransitioning: boolean = false;
+  private lastSaveTime: number = 0;
+  private readonly THROTTLE_MS = 500;
+  private readonly DEBOUNCE_MS = 350;
 
   // Avoid unnecessary disk writes by remembering last saved progress
   private lastSavedProgress: number = -1;
@@ -157,11 +167,13 @@ export class ReadingProgressTracker {
     // Flush any pending save for previous note before switching
     this.detachScrollListener();
 
+    this.isTransitioning = true;
     this.trackedView = view;
     this.trackedFile = file;
     this.lastSavedProgress = getSavedProgress(this.app, file);
+    this.lastSaveTime = Date.now();
 
-    // Update status bar immediately
+    // Update status bar immediately with the new note's saved progress
     this.updateStatusBar(this.lastSavedProgress);
 
     // Attach listeners and restore scroll after DOM layout completes
@@ -170,14 +182,15 @@ export class ReadingProgressTracker {
         this.attachScrollListener(view, file);
         this.restoreScrollPosition(view, file);
       }
-    }, 250);
+    }, 200);
 
-    // Backup restore check in case complex markdown/images took extra milliseconds to layout
+    // End transition period after scroll restore has settled
     window.setTimeout(() => {
       if (this.trackedView === view) {
         this.restoreScrollPosition(view, file);
+        this.isTransitioning = false;
       }
-    }, 650);
+    }, 450);
   }
 
   /**
@@ -242,23 +255,44 @@ export class ReadingProgressTracker {
       window.clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
       // Immediately flush pending save on detach so progress is never lost
-      if (this.trackedView && this.trackedFile) {
+      if (this.trackedView && this.trackedFile && !this.isTransitioning) {
         this.saveScrollProgress(this.trackedView, this.trackedFile);
       }
     }
 
     this.trackedView = null;
     this.trackedFile = null;
+    this.isTransitioning = false;
   }
 
   /**
-   * Handles a scroll event — debounces the save by DEBOUNCE_MS (2s).
+   * Handles a scroll event — updates live status bar, throttles live saves,
+   * and triggers instant transition to reading on first scroll.
    */
   private onScroll(view: MarkdownView, file: TFile): void {
+    if (this.isTransitioning) return;
+
     // Update live status bar immediately as user scrolls
     const liveProgress = this.calculateProgress(view);
     this.updateStatusBar(liveProgress);
 
+    const now = Date.now();
+
+    // 1. If starting to scroll for the first time from 0%, save immediately!
+    const isFirstScroll = this.lastSavedProgress <= 0 && liveProgress >= 1;
+    if (isFirstScroll) {
+      this.lastSaveTime = now;
+      this.saveScrollProgress(view, file);
+      return;
+    }
+
+    // 2. Throttle save every THROTTLE_MS (500ms) while actively reading/scrolling
+    if (now - this.lastSaveTime >= this.THROTTLE_MS) {
+      this.lastSaveTime = now;
+      this.saveScrollProgress(view, file);
+    }
+
+    // 3. Trailing debounce of DEBOUNCE_MS (350ms) to capture the resting position
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
     }

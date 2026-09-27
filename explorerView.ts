@@ -103,6 +103,19 @@ export class StashpaperExplorerView extends ItemView {
 
     // Subscribe to metadata and vault events so the view updates automatically
     this.registerEvent(
+      (this.app.workspace as any).on(
+        "stashpaper:progress-updated",
+        (filePath: string, progress: number, status: string) => {
+          const art = this.allArticles.find((a) => a.file.path === filePath);
+          if (art) {
+            art.progress = progress;
+            art.status = status;
+            this.renderArticles();
+          }
+        }
+      )
+    );
+    this.registerEvent(
       this.app.metadataCache.on("changed", () => this.scheduleRefresh())
     );
     this.registerEvent(
